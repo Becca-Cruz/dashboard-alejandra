@@ -470,6 +470,22 @@ const ABRIL_PENDIENTES = [
     { nombre: "Rebe me tiene", monto: 50    },
 ];
 
+const ABRIL_OTROS = [
+    { nombre: "Cuota portón eléctrico",      monto: 22.5  },
+    { nombre: "NEW cuota extra condominio",  monto: 35    },
+    { nombre: "Cuota especial condominio",   monto: 48.64 },
+    { nombre: "Alejandro",                   monto: 360   },
+    { nombre: "Ginecólogo",                  monto: 40    },
+    { nombre: "Lunares",                     monto: 50    },
+    { nombre: "Llaves del carro",            monto: 8     },
+    { nombre: "Colchones",                   monto: 30    },
+    { nombre: "Veterinario Randall",         monto: 25    },
+    { nombre: "Zapatos mami",                monto: 30    },
+    { nombre: "Cholas pa",                   monto: 10    },
+    { nombre: "Giovanni Patiño",             monto: 79    },
+    { nombre: "Rebecca",                     monto: 105   },
+];
+
 /* ─────────────────────────────────────────
    ESTADO
 ───────────────────────────────────────── */
@@ -512,6 +528,16 @@ function migrar(d, key) {
             : [];
     }
 
+    // Agregar otros gastos de abril si no existen aún
+    if (key === '2026-04') {
+        const tieneOtros = d.gastos.some(g => g.tipo === 'otro');
+        if (!tieneOtros) {
+            d.gastos.push(...ABRIL_OTROS.map(g => ({
+                id:uid(), nombre:g.nombre, monto:g.monto, tipo:'otro', pagado:false
+            })));
+        }
+    }
+
     return d;
 }
 
@@ -525,9 +551,14 @@ function cargarDatos(key) {
         ingresos: PLANTILLA.ingresos.map(i => ({
             id:uid(), nombre:i.nombre, monto:i.monto, cobrado:false
         })),
-        gastos: PLANTILLA.gastosFijos.map(g => ({
-            id:uid(), nombre:g.nombre, monto:g.monto, tipo:'fijo', pagado:false
-        })),
+        gastos: [
+            ...PLANTILLA.gastosFijos.map(g => ({
+                id:uid(), nombre:g.nombre, monto:g.monto, tipo:'fijo', pagado:false
+            })),
+            ...(esMesEspecial ? ABRIL_OTROS.map(g => ({
+                id:uid(), nombre:g.nombre, monto:g.monto, tipo:'otro', pagado:false
+            })) : []),
+        ],
         pagosPendientes: esMesEspecial
             ? ABRIL_PENDIENTES.map(p => ({ id:uid(), nombre:p.nombre, monto:p.monto, cobrado:false }))
             : [],
