@@ -142,6 +142,73 @@
         .btn-secondary{background:var(--bg);color:var(--text);border:1px solid var(--border);}
         .btn-secondary:hover{background:var(--border);}
 
+        /* ── POST-IT ── */
+        .postit-wrap{
+            padding:0 1.75rem 3rem;max-width:1280px;margin:0 auto;
+            display:flex;justify-content:center;
+        }
+        .postit{
+            position:relative;
+            background:linear-gradient(160deg,#fef9c3 0%,#fef08a 100%);
+            border-radius:3px 3px 3px 3px;
+            padding:1.25rem 1.5rem 1.75rem;
+            width:500px;max-width:100%;
+            box-shadow:3px 3px 10px rgba(0,0,0,.15),6px 8px 24px rgba(0,0,0,.09),0 0 0 1px rgba(0,0,0,.04);
+            transform:rotate(-1.2deg);
+            transition:transform .25s,box-shadow .25s;
+        }
+        .postit:hover{transform:rotate(0deg) scale(1.01);box-shadow:4px 6px 18px rgba(0,0,0,.18),8px 12px 32px rgba(0,0,0,.1);}
+        /* cinta adhesiva arriba */
+        .postit::before{
+            content:'';position:absolute;top:-12px;left:50%;transform:translateX(-50%);
+            width:64px;height:22px;
+            background:rgba(255,255,220,.65);
+            border-radius:2px;
+            box-shadow:0 1px 4px rgba(0,0,0,.12);
+            backdrop-filter:blur(2px);
+        }
+        /* esquina doblada abajo-derecha */
+        .postit::after{
+            content:'';position:absolute;bottom:0;right:0;
+            width:0;height:0;
+            border-style:solid;
+            border-width:0 0 28px 28px;
+            border-color:transparent transparent rgba(202,170,0,.25) transparent;
+            border-radius:0 0 3px 0;
+        }
+        .postit-header{
+            display:flex;align-items:center;gap:.5rem;
+            margin-bottom:.85rem;padding-bottom:.65rem;
+            border-bottom:1.5px dashed rgba(180,130,0,.3);
+        }
+        .postit-pin{font-size:1.15rem;transform:rotate(15deg);display:inline-block;line-height:1;}
+        .postit-title{
+            font-size:.72rem;font-weight:800;
+            color:#92400e;text-transform:uppercase;letter-spacing:.1em;
+        }
+        .postit-saved{
+            margin-left:auto;font-size:.65rem;color:#a16207;
+            opacity:0;transition:opacity .3s;font-style:italic;
+        }
+        .postit-saved.show{opacity:1;}
+        .postit-area{
+            width:100%;min-height:100px;
+            background:transparent;border:none;outline:none;
+            resize:none;overflow:hidden;
+            font-size:.9rem;color:#78350f;line-height:1.85;
+            font-family:inherit;
+        }
+        .postit-area::placeholder{color:#ca8a04;opacity:.55;}
+        /* líneas de guía sutiles */
+        .postit-area{
+            background-image:repeating-linear-gradient(
+                transparent, transparent 29px,
+                rgba(180,130,0,.12) 29px, rgba(180,130,0,.12) 30.5px
+            );
+            background-size:100% 30.5px;
+            padding-top:2px;
+        }
+
         /* ── RESPONSIVE ── */
         @media(max-width:800px){
             .summary-wrap{grid-template-columns:1fr;padding:1rem;}
@@ -200,6 +267,20 @@
 <div class="main-grid">
     <div class="col" id="col0"></div>
     <div class="col" id="col1"></div>
+</div>
+
+<!-- ═══ POST-IT NOTAS ═══ -->
+<div class="postit-wrap">
+    <div class="postit">
+        <div class="postit-header">
+            <span class="postit-pin">📌</span>
+            <span class="postit-title">Notas del mes</span>
+            <span class="postit-saved" id="notaGuardada">Guardado ✓</span>
+        </div>
+        <textarea id="notasMes" class="postit-area"
+                  placeholder="Recordatorios, pendientes, ideas... escribí lo que quieras."
+                  rows="4"></textarea>
+    </div>
 </div>
 
 <!-- ═══ MODAL ═══ -->
@@ -743,20 +824,47 @@ document.getElementById('mMonto').addEventListener('keydown', e=>{
 /* ─── NAVEGACIÓN MESES ─── */
 document.getElementById('prevMonth').addEventListener('click',()=>{
     cur=new Date(cur.getFullYear(),cur.getMonth()-1,1);
-    mesKey=getMesKey(cur); data=cargarDatos(mesKey); render();
+    mesKey=getMesKey(cur); data=cargarDatos(mesKey); render(); cargarNota();
 });
 document.getElementById('nextMonth').addEventListener('click',()=>{
     cur=new Date(cur.getFullYear(),cur.getMonth()+1,1);
-    mesKey=getMesKey(cur); data=cargarDatos(mesKey); render();
+    mesKey=getMesKey(cur); data=cargarDatos(mesKey); render(); cargarNota();
 });
 document.getElementById('resetBtn').addEventListener('click',()=>{
     if(!confirm(`¿Reiniciar ${getMesNombre(cur)} con la plantilla base?`)) return;
     localStorage.removeItem(`ale_${mesKey}`);
-    data=cargarDatos(mesKey); render();
+    data=cargarDatos(mesKey); render(); cargarNota();
+});
+
+/* ─── NOTAS / POST-IT ─── */
+let notaTimer = null;
+const notaEl  = document.getElementById('notasMes');
+const notaOK  = document.getElementById('notaGuardada');
+
+function cargarNota(){
+    notaEl.value = localStorage.getItem(`ale_nota_${mesKey}`) || '';
+    autoResizeNota();
+}
+
+function autoResizeNota(){
+    notaEl.style.height = 'auto';
+    notaEl.style.height = Math.max(100, notaEl.scrollHeight) + 'px';
+}
+
+notaEl.addEventListener('input', function(){
+    autoResizeNota();
+    clearTimeout(notaTimer);
+    notaOK.classList.remove('show');
+    notaTimer = setTimeout(()=>{
+        localStorage.setItem(`ale_nota_${mesKey}`, this.value);
+        notaOK.classList.add('show');
+        setTimeout(()=>notaOK.classList.remove('show'), 1800);
+    }, 600);
 });
 
 /* ─── INICIO ─── */
 render();
+cargarNota();
 </script>
 </body>
 </html>
