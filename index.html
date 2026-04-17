@@ -209,6 +209,10 @@
             padding-top:2px;
         }
 
+        /* ── SAVE TOAST ── */
+        #saveToast{position:fixed;bottom:1.5rem;right:1.5rem;background:#1e293b;color:#fff;font-size:.75rem;font-weight:600;padding:.5rem 1rem;border-radius:999px;box-shadow:0 4px 14px rgba(0,0,0,.25);opacity:0;transform:translateY(6px);transition:opacity .25s,transform .25s;pointer-events:none;z-index:999;}
+        #saveToast.show{opacity:1;transform:translateY(0);}
+
         /* ── RESPONSIVE ── */
         @media(max-width:800px){
             .summary-wrap{grid-template-columns:1fr;padding:1rem;}
@@ -234,6 +238,7 @@
     </div>
     <button class="reset-btn" id="resetBtn">Reiniciar mes</button>
 </header>
+<div id="saveToast">✓ Guardado</div>
 
 <!-- ═══ BALANCE HERO ═══ -->
 <div class="balance-hero">
@@ -384,30 +389,7 @@ function getMesKey(d){ return `${d.getFullYear()}-${String(d.getMonth()+1).padSt
 function getMesNombre(d){ return `${MESES[d.getMonth()]} ${d.getFullYear()}`; }
 function uid(){ return Math.random().toString(36).slice(2)+Date.now().toString(36); }
 
-/* ─── MIGRACIÓN desde formato viejo ─── */
-function migrar(d, key){
-    if(d.secciones) {
-        // Formato nuevo — verificar que abril tenga sus datos
-        if(key==='2026-04') rellenarAbril(d);
-        return d;
-    }
-    // Convertir formato viejo al nuevo
-    const nuevo = { secciones: crearSecciones(key) };
-    const find = id => nuevo.secciones.find(s=>s.id===id);
-
-    (d.ingresos||[]).forEach(i => find('ingresos').items.push(
-        {id:i.id||uid(),nombre:i.nombre,monto:i.monto,cobrado:i.cobrado||false}));
-    (d.pagosPendientes||[]).forEach(p => find('pendientes').items.push(
-        {id:p.id||uid(),nombre:p.nombre,monto:p.monto,cobrado:p.cobrado||false}));
-    (d.gastos||[]).forEach(g=>{
-        const tipo = g.tipo||'otro';
-        const secId = tipo==='fijo'?'fijos':tipo==='parami'?'parami':'otros';
-        find(secId)?.items.push({id:g.id||uid(),nombre:g.nombre,monto:g.monto,pagado:g.pagado||false});
-    });
-    if(key==='2026-04') rellenarAbril(nuevo);
-    return nuevo;
-}
-
+/* ─── MIGRACIÓN ─── */
 function crearSecciones(key){
     const es04 = key==='2026-04';
     return PLANTILLA_SECS.map(ps=>{
@@ -426,21 +408,65 @@ function crearSecciones(key){
     });
 }
 
-function rellenarAbril(d){
-    const pendSec = d.secciones.find(s=>s.id==='pendientes');
-    const otroSec = d.secciones.find(s=>s.id==='otros');
-    if(pendSec && pendSec.items.length===0)
-        pendSec.items = ABRIL.pendientes.map(p=>({id:uid(),nombre:p.nombre,monto:p.monto,cobrado:false}));
-    if(otroSec && otroSec.items.length===0)
-        otroSec.items = ABRIL.otros.map(g=>({id:uid(),nombre:g.nombre,monto:g.monto,pagado:false}));
+function migrar(d, key){
+    if(d.secciones){
+        // Ya es formato nuevo. Rellena abril SOLO la primera vez (_abrilInit)
+        if(key==='2026-04' && !d._abrilInit){
+            const pend = d.secciones.find(s=>s.id==='pendientes');
+            const otro = d.secciones.find(s=>s.id==='otros');
+            if(pend && pend.items.length===0)
+                pend.items = ABRIL.pendientes.map(p=>({id:uid(),nombre:p.nombre,monto:p.monto,cobrado:false}));
+            if(otro && otro.items.length===0)
+                otro.items = ABRIL.otros.map(g=>({id:uid(),nombre:g.nombre,monto:g.monto,pagado:false}));
+            d._abrilInit = true;
+        }
+        return d;
+    }
+    // Formato viejo → convertir
+    const nuevo = { secciones: crearSecciones(key), _abrilInit: true };
+    const find  = id => nuevo.secciones.find(s=>s.id===id);
+    // Limpiar items de plantilla antes de migrar para evitar duplicados
+    ['pendientes','otros','parami'].forEach(id=>{ const s=find(id); if(s) s.items=[]; });
+
+    (d.ingresos||[]).forEach(i=>find('ingresos').items.push(
+        {id:i.id||uid(),nombre:i.nombre,monto:i.monto,cobrado:i.cobrado||false}));
+    (d.pagosPendientes||[]).forEach(p=>find('pendientes').items.push(
+        {id:p.id||uid(),nombre:p.nombre,monto:p.monto,cobrado:p.cobrado||false}));
+    (d.gastos||[]).forEach(g=>{
+        const secId = g.tipo==='fijo'?'fijos':g.tipo==='parami'?'parami':'otros';
+        find(secId)?.items.push({id:g.id||uid(),nombre:g.nombre,monto:g.monto,pagado:g.pagado||false});
+    });
+    return nuevo;
 }
 
 function cargarDatos(key){
-    const raw = localStorage.getItem(`ale_${key}`);
-    if(raw) return migrar(JSON.parse(raw), key);
-    return { secciones: crearSecciones(key) };
+    let d;
+    try {
+        const raw = localStorage.getItem(`ale_${key}`);
+        d = raw ? migrar(JSON.parse(raw), key) : { secciones: crearSecciones(key), _abrilInit: true };
+    } catch(e) {
+        d = { secciones: crearSecciones(key), _abrilInit: true };
+    }
+    // *** Guardar inmediatamente para que el dato persista aunque no se haga ninguna acción ***
+    try { localStorage.setItem(`ale_${key}`, JSON.stringify(d)); } catch(e){}
+    return d;
 }
-function guardar(){ localStorage.setItem(`ale_${mesKey}`, JSON.stringify(data)); }
+
+function guardar(){
+    try {
+        localStorage.setItem(`ale_${mesKey}`, JSON.stringify(data));
+        mostrarGuardado();
+    } catch(e){ console.warn('No se pudo guardar:', e); }
+}
+
+/* Indicador visual de guardado */
+function mostrarGuardado(){
+    let toast = document.getElementById('saveToast');
+    if(!toast) return;
+    toast.classList.add('show');
+    clearTimeout(toast._t);
+    toast._t = setTimeout(()=>toast.classList.remove('show'), 1800);
+}
 
 /* ─── CÁLCULOS ─── */
 function itemCobradoMonto(item){
